@@ -76,6 +76,7 @@ class FileDownload extends events_1.default {
                 // whole pipeline. Caller should pipe to other streams and resume
                 decompress.pause();
                 resolve(decompress);
+                util_1.default.debuglog(`res.body -> ` + res.body);
             });
             downloadRequest.resume();
         });

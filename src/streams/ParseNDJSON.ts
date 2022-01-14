@@ -1,5 +1,5 @@
 import { Transform } from "stream"
-
+import util         from "util"
 
 export interface ParseNDJSONOptions {
     maxLineLength: number,
@@ -61,6 +61,8 @@ export default class ParseNDJSON extends Transform
         // Convert the chunk buffer to string
         const stringChunk = chunk.toString("utf8");
 
+        util.debuglog(`stringChunk -> ${stringChunk}`);
+
         // Get the char length of the chunk
         const chunkLength = stringChunk.length;
 
@@ -80,44 +82,57 @@ export default class ParseNDJSON extends Transform
         this._stringBuffer += stringChunk;
         this.bufferSize = this._stringBuffer.length;
 
-        
-        // Find the position of the first EOL
-        let eolPos = this._stringBuffer.search(/\n/);
-
         // The chunk might span over multiple lines
-        while (eolPos > -1) {
-            const jsonString   = this._stringBuffer.substring(0, eolPos);
-            this._stringBuffer = this._stringBuffer.substring(eolPos + 1);
-            this.bufferSize    = this._stringBuffer.length;
-            this._line        += 1;
+        let idx = 0;
+        let jsonString = "";
+        while (idx < this._stringBuffer.length){
+            let eol = false;
+            let ch = this._stringBuffer[idx];
+            if (ch == '\n') {
+                eol = true;
+            } else { 
+                jsonString += ch;
+            }
             
-            // If this is not an empty line!
-            if (jsonString.trim().length) {
-                try {
-                    const json = JSON.parse(jsonString);
-
-                    if (this.options.expectedResourceType &&
-                        json.resourceType !== this.options.expectedResourceType) {
-                        throw new Error(`Expected each resource to have a "${
-                            this.options.expectedResourceType
-                        }" resourceTpe but found "${json.resourceType}"`)
+            idx += 1;
+            if (idx == this._stringBuffer.length || eol) { 
+                console.log(jsonString);
+                this._line        += 1;
+                if (jsonString.trim().length) {
+                    try {
+                        console.log(`${this._line} ${jsonString}`);
+                        const json = JSON.parse(jsonString);
+    
+                        if (this.options.expectedResourceType &&
+                            json.resourceType !== this.options.expectedResourceType) {
+                            throw new Error(`Expected each resource to have a "${
+                                this.options.expectedResourceType
+                            }" resourceTpe but found "${json.resourceType}"`)
+                        }
+    
+                        this.push(json);
+                        util.debuglog(`res.body -> ${json}`);
+                        this._count += 1;
+                    } catch (error) {
+                        console.log(`res.body -> ${jsonString}`)
+                        this._stringBuffer = "";
+                        this.bufferSize   = 0;
+                        return next(new SyntaxError(
+                            `Error parsing NDJSON on line ${this._line}: ${error} ${jsonString}`
+                        ));
                     }
-
-                    this.push(json);
-
-                    this._count += 1;
-                } catch (error) {
-                    // this.push(jsonString);
-                    this._stringBuffer = "";
-                    this.bufferSize   = 0;
+                } else {
+                    /*
+                     * There shouldn't be an empty line here
+                     */
                     return next(new SyntaxError(
-                        `Error parsing NDJSON on line ${this._line} ('${eolPos}'): ${error}`
+                        `Error parsing NDJSON on line - here ${this._line} ('${idx}')`
                     ));
                 }
+                jsonString = "";
             }
-
-            eolPos = this._stringBuffer.search(/\n/);
         }
+        this._stringBuffer = "";
 
         next();
     }

@@ -120,6 +120,8 @@ class FileDownload extends EventEmitter
                 decompress.pause()
 
                 resolve(decompress)
+
+                util.debuglog(`res.body -> ` + res.body);
             });
 
             downloadRequest.resume();
